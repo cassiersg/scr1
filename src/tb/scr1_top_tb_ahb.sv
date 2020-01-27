@@ -256,7 +256,7 @@ always_ff @(posedge clk) begin
                 test_running <= 1'b0;
                 test_pass = 1;
 
-                $sformat(tmpstr, "riscv64-unknown-elf-readelf -s %s | grep 'begin_signature\\|end_signature' | awk '{print $2}' > elfinfo", get_filename(test_file));
+                $sformat(tmpstr, "riscv32-unknown-elf-readelf -s %s | grep 'begin_signature\\|end_signature' | awk '{print $2}' > elfinfo", get_filename(test_file));
                 fd = $fopen("script.sh", "w");
                 if (fd == 0) begin
                     $write("Can't open script.sh\n");
@@ -416,6 +416,70 @@ scr1_top_ahb i_top (
     .dmem_hresp         (dmem_hresp     )
 );
 
+
+wire [31:0] i_dmem_hrdata;
+wire i_dmem_hready;
+wire i_dmem_hresp;
+
+wire [31:0] m_hrdata;
+wire [1:0] m_hresp;
+wire m_hready;
+
+wire [31:0] s_haddr;
+wire [1:0] s_htrans;
+wire [2:0] s_hsize;
+wire [2:0] s_hburst;
+wire [3:0] s_hprot;
+wire s_hwrite;
+wire [31:0] s_hwdata;
+wire s_hready;
+wire s0_hsel, s1_hsel;
+wire s0_hready, s1_hready;
+wire [1:0] s0_hresp, s1_hresp;
+wire [31:0] s0_hrdata, s1_hrdata;
+
+amba_ahb_m1s2 #(
+    .P_HSEL0_START(32'h0),
+    .P_HSEL0_SIZE(SCR1_MEM_SIZE),
+    .P_HSEL1_START(32'h900000),
+    .P_HSEL1_SIZE(SCR1_MEM_SIZE)
+) ahb_mux (
+      .HRESETn(rst_n)
+    , .HCLK(clk)
+    , .M_HADDR(dmem_haddr)
+    , .M_HTRANS(dmem_htrans)
+    , .M_HWRITE(dmem_hwrite)
+    , .M_HSIZE(dmem_hsize)
+    , .M_HBURST(dmem_hburst)
+    , .M_HPROT(dmem_hprot)
+    , .M_HWDATA(dmem_hwdata)
+    , .M_HRDATA(m_hrdata)
+    , .M_HRESP(m_hresp)
+    , .M_HREADY(m_hready)
+    , .S_HADDR(s_haddr)
+    , .S_HTRANS(s_htrans)
+    , .S_HSIZE(s_hsize)
+    , .S_HBURST(s_hburst)
+    , .S_HPROT(s_hprot)
+    , .S_HWRITE(s_hwrite)
+    , .S_HWDATA(s_hwdata)
+    , .S_HREADY(s_hready)
+    , .S0_HSEL(s0_hsel)
+    , .S0_HREADY(s0_hready)
+    , .S0_HRESP(s0_hresp)
+    , .S0_HRDATA(s0_hrdata)
+    , .S1_HSEL(s1_hsel)
+    , .S1_HREADY(s1_hready)
+    , .S1_HRESP(s1_hresp)
+    , .S1_HRDATA(s1_hrdata)
+    , .REMAP(1'b0)
+);
+
+assign s0_hready = i_dmem_hready;
+assign s0_hresp = i_dmem_hresp;
+assign s0_hrdata = i_dmem_hrdata;
+
+
 //-------------------------------------------------------------------------------
 // Memory instance
 //-------------------------------------------------------------------------------
@@ -449,9 +513,115 @@ scr1_memory_tb_ahb #(
     .dmem_haddr             (dmem_haddr ),
     .dmem_hwrite            (dmem_hwrite),
     .dmem_hwdata            (dmem_hwdata),
-    .dmem_hready            (dmem_hready),
-    .dmem_hrdata            (dmem_hrdata),
-    .dmem_hresp             (dmem_hresp )
+    .dmem_hready            (i_dmem_hready),
+    .dmem_hrdata            (i_dmem_hrdata),
+    .dmem_hresp             (i_dmem_hresp )
 );
+
+assign dmem_hready = m_hready;
+assign dmem_hrdata = m_hrdata;
+assign dmem_hresp = m_hresp[0];
+
+wire hrdata_wrong = (m_hrdata != dmem_hrdata);
+wire hresp_wrong = (m_hresp != dmem_hresp);
+wire hready_wrong = (m_hready != dmem_hready);
+wire haddr_wrong = (s_haddr != dmem_haddr);
+wire htrans_wrong = (s_htrans != dmem_htrans);
+wire hsize_wrong = (s_hsize != dmem_hsize);
+wire hburst_wrong = (s_hburst != dmem_hburst);
+wire hwrite_wrong = (s_hwrite != dmem_hwrite);
+wire hwdata_wrong = (s_hwdata != dmem_hwdata);
+
+/*
+mem_ahb i_mem_ahb(
+    .HRESETn(rst_n),
+    .HCLK(clk),
+    .HSEL(s1_hsel),
+    .HADDR(s_haddr),
+    .HTRANS(s_htrans),
+    .HWRITE(s_hwrite),
+    .HSIZE(s_hsize),
+    .HBURST(s_hburst),
+    .HWDATA(s_hwdata),
+    .HRDATA(s1_hrdata),
+    .HRESP(s1_hresp),
+    .HREADYin(s_hready),
+    .HREADYout(s1_hready)
+);
+*/
+
+wire s_penable;
+wire [31:0] s_paddr;
+wire s_pwrite;
+wire [31:0] s_pwdata;
+wire s0_psel, s1_psel;
+wire [31:0] s0_prdata, s1_prdata;
+wire s0_pready, s1_pready;
+wire s0_pslverr, s1_pslverr;
+
+ahb_to_apb_s2 #(
+    .P_PSEL0_START(32'h900000),
+    .P_PSEL0_SIZE(32'h10000),
+    .P_PSEL1_START(32'h920000),
+    .P_PSEL1_SIZE(32'h10000)
+) apb_bridge (
+    .HRESETn(rst_n)
+    , .HCLK(clk)
+    , .HSEL(s1_hsel)
+    , .HADDR(s_haddr)
+    , .HTRANS(s_htrans)
+    , .HPROT(s_hprot)
+    , .HLOCK(1'b0)
+    , .HWRITE(s_hwrite)
+    , .HSIZE(s_hsize)
+    , .HBURST(s_hburst)
+    , .HWDATA(s_hwdata)
+    , .HRDATA(s1_hrdata)
+    , .HRESP(s1_hresp)
+    , .HREADYin(s_hready)
+    , .HREADYout(s1_hready)
+    , .PCLK(clk)
+    , .PRESETn(rst_n)
+    , .S_PENABLE(s_penable)
+    , .S_PADDR(s_paddr)
+    , .S_PWRITE(s_pwrite)
+    , .S_PWDATA(s_pwdata)
+    , .S0_PSEL(s0_psel)
+    , .S0_PRDATA(s0_prdata)
+    , .S0_PREADY(s0_pready)
+    , .S0_PSLVERR(s0_pslverr)
+    , .S1_PSEL(s1_psel)
+    , .S1_PRDATA(s1_prdata)
+    , .S1_PREADY(s1_pready)
+    , .S1_PSLVERR(s1_pslverr)
+);
+
+mem_apb apb_ram (
+    .PRESETn(rst_n),
+    .PCLK(clk),
+    .PSEL(s0_psel),
+    .PENABLE(s_penable),
+    .PADDR(s_paddr),
+    .PWRITE(s_pwrite),
+    .PRDATA(s0_prdata),
+    .PWDATA(s_pwdata),
+    .PREADY(s0_pready),
+    .PSLVERR(s0_pslverr)
+);
+
+gpp_regfile_example apb_ram2
+(
+    .HCLK(clk),
+    .HRESETn(rst_n),
+    .PADDR(s_paddr[11:0]),
+    .PWDATA(s_pwdata),
+    .PWRITE(s_pwrite),
+    .PSEL(s1_psel),
+    .PENABLE(s_penable),
+    .PRDATA(s1_prdata),
+    .PREADY(s1_pready),
+    .PSLVERR(s1_pslverr)
+);
+
 
 endmodule : scr1_top_tb_ahb

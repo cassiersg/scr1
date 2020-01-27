@@ -63,7 +63,7 @@ test_results := $(bld_dir)/test_results.txt
 test_info    := $(bld_dir)/test_info
 
 # Environment
-export CROSS_PREFIX  ?= riscv64-unknown-elf-
+export CROSS_PREFIX  ?= riscv32-unknown-elf-
 export RISCV_GCC     ?= $(CROSS_PREFIX)gcc
 export RISCV_OBJDUMP ?= $(CROSS_PREFIX)objdump -D
 export RISCV_OBJCOPY ?= $(CROSS_PREFIX)objcopy -O verilog
@@ -82,20 +82,20 @@ endif
 ifeq (,$(findstring e,$(ARCH_lowercase)))
 ifeq (,$(findstring 0,$(IPIC)))
 # comment this target if you don't want to run the vectored_isr_sample
-TARGETS += vectored_isr_sample
+#TARGETS += vectored_isr_sample
 endif
 
 # comment this target if you don't want to run the riscv_isa
-TARGETS += riscv_isa
+#TARGETS += riscv_isa
 
 # comment this target if you don't want to run the riscv_compliance
-TARGETS += riscv_compliance
+#TARGETS += riscv_compliance
 endif
 
 # comment this target if you don't want to run the coremark
-TARGETS += coremark
+#TARGETS += coremark
 # comment this target if you don't want to run the dhrystone
-TARGETS += dhrystone21
+#TARGETS += dhrystone21
 # comment this target if you don't want to run the hello test
 TARGETS += hello
 
@@ -149,7 +149,7 @@ run_modelsim: $(test_info)
 	$(MAKE) -C $(root_dir)/sim build_modelsim; \
 	printf "" > $(test_results); \
 	cd $(bld_dir); \
-	vsim -c -do "run -all" +nowarn3691 \
+	vsim -gui -do "source wave.do; run -all" +nowarn3691 \
 	+test_info=$(test_info) \
 	+test_results=$(test_results) \
 	+imem_pattern=$(imem_pattern) \

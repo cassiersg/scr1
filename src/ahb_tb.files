@@ -1,3 +1,8 @@
 pipeline/scr1_tracelog.sv
 tb/scr1_memory_tb_ahb.sv
 tb/scr1_top_tb_ahb.sv
+tb/amba_ahb_m1s2.v
+tb/mem_ahb.v
+tb/mem_apb.v
+tb/ahb_to_apb_s2.v
+tb/gpp_regfile_example.sv
